@@ -14,7 +14,7 @@
 ### b. 功能介绍
 
 1. `auto_judger.py`可以自动判题（依赖于judger.py，judger_batch.py与data文件夹等 ，所以别删掉原文件。但是，随机添加文件是可以的。）
-2. `auto_package.py`可以一键打包并打开提交作业的网页。目前可以做到收集所有.cpp和.h文件，所以不要在题目文件夹下保留其他cpp文件。
+2. `auto_package.py`可以一键打包并打开提交作业的网页。目前可以做到收集所有.cpp和.h文件，所以不要在题目文件夹下保留其他cpp文件。zip文件会保存在**assignmentx文件夹里面**。
 
 ## 1. 自动评判工具 (auto_judger.py)
 
@@ -35,7 +35,7 @@ python auto_judger.py
 此工具用于打包你的作业文件以便提交，可以:
 - 自动定位最新的assignment文件夹
 - 自动从子文件夹收集所有.cpp和.h文件
-- 按照规定格式生成zip压缩包
+- 按照规定格式生成zip压缩包，**保存在assignmentx文件夹里面**
 - 保存学号信息，避免重复输入
 - 打包完成后可一键打开交作业网站
 
@@ -68,3 +68,8 @@ python auto_package.py
 2. 打包工具只会收集符合"x_yyy"格式文件夹中的.cpp和.h文件
 3. 评判工具需要原始assignment文件夹中的judger_batch.py才能工作
 4. 首次使用需要输入12位学号，之后会自动保存
+
+## 作者
+
+李效成-主要代码编写
+史浩廷-代码优化与提升
