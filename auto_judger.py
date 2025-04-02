@@ -137,14 +137,23 @@ def display_test_case_details(success, msg, details, input_content, user_output,
         
         # 打印用户输出和标准输出
         if user_output is not None and std_output is not None:
-            print("\n你的输出:")
-            print("-" * 40)
-            print(user_output)
-            print("-" * 40)
-            print("\n标准输出:")
-            print("-" * 40)
-            print(std_output)
-            print("-" * 40)
+            # 将输出分行以便对齐显示
+            user_lines = user_output.split('\n')
+            std_lines = std_output.split('\n')
+            
+            # 计算最大行数
+            max_lines = max(len(user_lines), len(std_lines))
+            
+            print(f"{'你的输出':<26} | {'标准输出':<30}")
+            print("-" * 60)
+            
+            # 对齐打印每一行
+            for i in range(max_lines):
+                user_line = user_lines[i] if i < len(user_lines) else ""
+                std_line = std_lines[i] if i < len(std_lines) else ""
+                print(f"{user_line:<30} | {std_line:<30}")
+            
+            print("-" * 60)
 
 def check_all_assignments(folders, assignment_path):
     all_passed = True
