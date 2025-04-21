@@ -6,13 +6,14 @@ import traceback
 import tempfile
 import shutil
 import zipfile
+import time  # 添加time模块用于计时
 from PyQt5 import sip
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QPushButton, QTextBrowser, QTreeWidget, QTreeWidgetItem, 
                             QDialog, QTabWidget, QMessageBox, QTextEdit, QScrollArea, 
                             QLineEdit, QDialogButtonBox, QSpacerItem, QSizePolicy,
                             QStyleFactory, QFrame, QCheckBox, QToolButton)
-from PyQt5.QtCore import Qt, QUrl, QTimer
+from PyQt5.QtCore import Qt, QUrl, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow
@@ -1048,6 +1049,116 @@ class ThemeToggleWidget(QWidget):
                 }}
             """)
 
+class LongRunningDialog(QDialog):
+    """长时间运行提示对话框"""
+    def __init__(self, parent=None, task_name=""):
+        super().__init__(parent)
+        self.setWindowTitle("判题时间过长")
+        self.resize(700, 200)
+        self.setModal(True)
+        
+        # 创建布局
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # 添加说明文本
+        message = "判题时间过长，可能是算法较慢或代码错误。最多等待 20 秒，之后窗口会自动关闭。你也可以提前终止运行。"
+        info_label = QLabel(message)
+        info_label.setStyleSheet("font-size: 22px;")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # 添加当前任务信息
+        task_label = QLabel(f"当前运行: {task_name}")
+        task_label.setStyleSheet(f"color: {Colors.current()['accent']}; font-weight: bold;")
+        layout.addWidget(task_label)
+        
+        # 添加按钮
+        button_box = QHBoxLayout()
+        
+        # 添加间距
+        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        button_box.addItem(spacer)
+        
+        # 直接查看按钮
+        self.view_button = QPushButton("终止")
+        self.view_button.setStyleSheet(f"""
+            background-color: {Colors.current()['accent']};
+            color: white;
+            padding: 8px 16px;
+            font-weight: bold;
+        """)
+        self.view_button.clicked.connect(self.accept)
+        button_box.addWidget(self.view_button)
+        
+        layout.addLayout(button_box)
+        self.setLayout(layout)
+
+class JudgeWorker(QThread):
+    """后台判题工作线程"""
+    # 定义信号
+    finished = pyqtSignal(str, str, float)  # stdout, stderr, 运行时间
+    error = pyqtSignal(Exception)  # 异常
+    
+    def __init__(self, command, cwd, judger_path=None, use_check_all=False, task=None, assignment_path=None):
+        super().__init__()
+        self.command = command
+        self.cwd = cwd
+        self.judger_path = judger_path
+        self.use_check_all = use_check_all
+        self.task = task
+        self.assignment_path = assignment_path
+        
+    def run(self):
+        start_time = time.time()
+        stdout = ""
+        stderr = ""
+        
+        try:
+            original_dir = os.getcwd()
+            # 切换到作业目录
+            os.chdir(self.cwd)
+            
+            if not self.use_check_all:
+                # 直接使用命令行运行
+                result = run_subprocess_no_window(self.command, 
+                                                 capture_output=True, 
+                                                 text=True, 
+                                                 encoding='utf-8')
+                stdout = result.stdout
+                stderr = result.stderr
+            else:
+                # 使用check_all_assignments函数运行测试
+                # 保存标准输出以便捕获
+                original_stdout = sys.stdout
+                from io import StringIO
+                captured_output = StringIO()
+                sys.stdout = captured_output
+                
+                # 调用check_all_assignments
+                check_all_assignments([self.task], self.assignment_path)
+                
+                # 恢复标准输出
+                sys.stdout = original_stdout
+                stdout = captured_output.getvalue()
+            
+            # 恢复原始目录
+            os.chdir(original_dir)
+            
+            # 计算运行时间
+            elapsed_time = time.time() - start_time
+            
+            # 发送完成信号
+            self.finished.emit(stdout, stderr, elapsed_time)
+            
+        except Exception as e:
+            # 确保恢复工作目录
+            if 'original_dir' in locals():
+                os.chdir(original_dir)
+            # 发送错误信号
+            self.error.emit(e)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1063,6 +1174,11 @@ class MainWindow(QMainWindow):
         self.test_point_details = {}  # 存储测试点详情的字典
         self.full_result_text = ""  # 存储完整的测试结果文本
         self.fonts = None  # 存储字体信息
+        self.timer = None  # 用于长时间运行检测
+        self.original_title = "CodeSentry"  # 保存原始窗口标题
+        self.judge_worker = None  # 判题工作线程
+        self.long_running_dialog = None  # 长时间运行对话框
+        self.is_judging = False  # 是否正在判题
         
         # 尝试切换到脚本或可执行文件所在目录
         try:
@@ -1604,6 +1720,11 @@ class MainWindow(QMainWindow):
     
     def run_task(self, task):
         """运行测试任务"""
+        # 如果已经在判题中，直接返回
+        if self.is_judging:
+            QMessageBox.information(self, "提示", "已有判题任务在运行中，请等待完成")
+            return
+            
         # 清空之前的结果和测试点详情
         self.result_text.clear()
         self.test_point_details.clear()
@@ -1612,18 +1733,36 @@ class MainWindow(QMainWindow):
         if not self.current_assignment or not task:
             return
         
+        # 标记正在判题
+        self.is_judging = True
+        
+        # 保存原始窗口标题
+        self.original_title = self.windowTitle()
+        # 更改窗口标题，显示正在运行的任务
+        self.setWindowTitle(f"运行{task}中...")
+        
+        # 显示正在运行的提示
+        self.result_text.setHtml("<span style='color:#888;'>正在运行判题，请稍候...</span>")
+        
+        # 设置定时器检查是否运行时间过长
+        self.timer = QTimer()
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(lambda: self.check_long_running(task))
+        self.timer.start(3000)  # 3秒后检查
         
         try:
-            # 切换到作业目录
+            # 准备判题环境
             original_dir = os.getcwd()
-            os.chdir(self.current_assignment)
-	
-            # 运行测试
-            judger_path = os.path.join(os.getcwd(), "judger_batch.py")
+            # 确保使用绝对路径
+            assignment_path = os.path.abspath(self.current_assignment)
+            
+            # 寻找judger_path
+            judger_path = os.path.join(assignment_path, "judger_batch.py")
+            use_check_all = False
             
             # 如果当前目录没找到，尝试在上级目录查找
             if not os.path.exists(judger_path):
-                judger_path = os.path.join(os.path.dirname(os.getcwd()), "judger_batch.py")
+                judger_path = os.path.join(os.path.dirname(assignment_path), "judger_batch.py")
             
             # 再找不到的话，直接在当前工作目录找
             if not os.path.exists(judger_path):
@@ -1632,103 +1771,141 @@ class MainWindow(QMainWindow):
             if not os.path.exists(judger_path):
                 # 使用auto_judger中的check_all_assignments函数可能的上下文
                 script_dir = os.path.dirname(os.path.abspath(__file__))
-                judger_path = os.path.join(script_dir, self.current_assignment, "judger_batch.py")
+                judger_path = os.path.join(script_dir, assignment_path, "judger_batch.py")
             
+            # 准备命令
             if not os.path.exists(judger_path):
                 # 尝试直接运行命令
                 command = ["python", "-T", task]
-                result = run_subprocess_no_window(command, capture_output=True, text=True, encoding='utf-8')
-                stdout = result.stdout
-                stderr = result.stderr
+                use_check_all = True  # 需要使用check_all_assignments
             else:
-                # 运行判题器获取结果
+                # 使用judger_batch.py
                 command = ["python", judger_path, "-T", task]
-                
-                result = run_subprocess_no_window(command, capture_output=True, text=True, encoding='utf-8')
-	
-                # 检查输出
-                stdout = result.stdout
-                stderr = result.stderr
+
+            # 创建判题工作线程
+            self.judge_worker = JudgeWorker(
+                command=command,
+                cwd=assignment_path,
+                judger_path=judger_path,
+                use_check_all=use_check_all,
+                task=task,
+                assignment_path=assignment_path
+            )
             
-            # 恢复原始目录
-            os.chdir(original_dir)
+            # 连接信号
+            self.judge_worker.finished.connect(self.on_judge_finished)
+            self.judge_worker.error.connect(self.on_judge_error)
             
-            # 收集需要显示的文本行
-            text_lines = []
-            
-            if stderr:
-                text_lines.append(f"<pre style='color:red;'>{stderr}</pre>")
-            
-            # 检查所有得分是否都是10分
-            scores = re.findall(r'\[SCORE\] (\d+)', stdout)
-            
-            all_correct = scores and all(int(score) == 10 for score in scores)
-            
-            # 显示结果
-            if stdout:
-                if all_correct:
-                    text_lines.append("<span style='color:green; font-weight:bold;'>🎉 恭喜你，全部做对了！</span>")
-                else:
-                    text_lines.append("<span style='color:red; font-weight:bold;'>😢 还需要改进</span>")
-                    
-                    # 显示详细结果
-                    text_lines.append("<pre>" + stdout + "</pre>")
-                    
-                    # 找出失败的测试点
-                    test_points = re.findall(r'\[TEST POINT (\d+)\].*?\[SCORE\] (\d+)', stdout, re.DOTALL)
-		
-                    for test_point, score in test_points:
-                        if int(score) != 10:
-                            # 使用简单的路径格式，避免URL解析问题，并添加初始的箭头指示符
-                            test_point_link = f'<a href="test_point:{test_point}">查看测试点 {test_point} 详情 ▶</a><br/>'
-                            text_lines.append(test_point_link)
-            else:
-                text_lines.append("<span style='color:red; font-weight:bold;'>❌ 未获取到判题结果</span>")
-                
-                # 尝试自行运行测试
-                text_lines.append("<span style='color:blue;'>正在尝试自行运行测试...</span>")
-                try:
-                    # 使用auto_judger中的函数自行测试
-                    assigned_folders = [task]
-                    
-                    # 获取脚本的绝对路径目录
-                    script_dir = os.path.dirname(os.path.abspath(__file__))
-                    assignment_path = os.path.join(script_dir, self.current_assignment)
-                    
-                    # 保存标准输出以便捕获
-                    original_stdout = sys.stdout
-                    from io import StringIO
-                    captured_output = StringIO()
-                    sys.stdout = captured_output
-                    
-                    # 调用check_all_assignments
-                    check_all_assignments(assigned_folders, assignment_path)
-                    
-                    # 恢复标准输出
-                    sys.stdout = original_stdout
-                    output = captured_output.getvalue()
-                    
-                    if output:
-                        text_lines.append("<pre>" + output + "</pre>")
-                    else:
-                        text_lines.append("<span style='color:red;'>未获取到测试输出</span>")
-                        
-                except Exception as e:
-                    text_lines.append(f"<span style='color:red;'>自行运行测试失败: {str(e)}</span>")
-            
-            # 保存完整的原始结果文本
-            self.full_result_text = "\n".join(text_lines)
-            
-            # 使用setHtml一次性设置HTML内容，而不是逐行append
-            self.result_text.clear()
-            self.result_text.setHtml(self.full_result_text)
+            # 启动工作线程
+            self.judge_worker.start()
             
         except Exception as e:
+            # 出现异常，停止计时器，恢复状态
+            if self.timer and self.timer.isActive():
+                self.timer.stop()
+                
+            # 恢复原始窗口标题
+            self.setWindowTitle(self.original_title)
+            self.is_judging = False
+                
             self.result_text.clear()
-            self.result_text.append(f"<span style='color:red;'>运行测试时出错: {str(e)}</span>")
-            # 恢复原始目录
-            if 'original_dir' in locals():
-                os.chdir(original_dir)
+            self.result_text.append(f"<span style='color:red;'>准备测试时出错: {str(e)}</span>")
+            traceback.print_exc()
+    
+    def on_judge_finished(self, stdout, stderr, elapsed_time):
+        """判题完成的回调函数"""
+        # 停止计时器
+        if self.timer and self.timer.isActive():
+            self.timer.stop()
+            
+        # 关闭长时间运行对话框（如果存在）
+        if self.long_running_dialog and self.long_running_dialog.isVisible():
+            self.long_running_dialog.close()
+            self.long_running_dialog = None
+        
+        # 恢复原始窗口标题
+        self.setWindowTitle(self.original_title)
+        self.is_judging = False
+        
+        # 收集需要显示的文本行
+        text_lines = []
+        
+        # 添加运行时间信息
+        text_lines.append(f"<span style='color:#888;'>运行时间: {elapsed_time:.2f}秒</span><br/>")
+        
+        if stderr:
+            text_lines.append(f"<pre style='color:red;'>{stderr}</pre>")
+        
+        # 检查所有得分是否都是10分
+        scores = re.findall(r'\[SCORE\] (\d+)', stdout)
+        
+        all_correct = scores and all(int(score) == 10 for score in scores)
+        
+        # 显示结果
+        if stdout:
+            if all_correct:
+                text_lines.append("<span style='color:green; font-weight:bold;'>🎉 恭喜你，全部做对了！</span>")
+            else:
+                text_lines.append("<span style='color:red; font-weight:bold;'>😢 还需要改进</span>")
+                
+                # 显示详细结果
+                text_lines.append("<pre>" + stdout + "</pre>")
+                
+                # 找出失败的测试点
+                test_points = re.findall(r'\[TEST POINT (\d+)\].*?\[SCORE\] (\d+)', stdout, re.DOTALL)
+	
+                for test_point, score in test_points:
+                    if int(score) != 10:
+                        # 使用简单的路径格式，避免URL解析问题，并添加初始的箭头指示符
+                        test_point_link = f'<a href="test_point:{test_point}">查看测试点 {test_point} 详情 ▶</a><br/>'
+                        text_lines.append(test_point_link)
+        else:
+            text_lines.append("<span style='color:red; font-weight:bold;'>❌ 未获取到判题结果</span>")
+        
+        # 保存完整的原始结果文本
+        self.full_result_text = "\n".join(text_lines)
+        
+        # 使用setHtml一次性设置HTML内容，而不是逐行append
+        self.result_text.clear()
+        self.result_text.setHtml(self.full_result_text)
+    
+    def on_judge_error(self, exception):
+        """判题出错的回调函数"""
+        # 停止计时器
+        if self.timer and self.timer.isActive():
+            self.timer.stop()
+            
+        # 关闭长时间运行对话框（如果存在）
+        if self.long_running_dialog and self.long_running_dialog.isVisible():
+            self.long_running_dialog.close()
+            self.long_running_dialog = None
+        
+        # 恢复原始窗口标题
+        self.setWindowTitle(self.original_title)
+        self.is_judging = False
+        
+        # 显示错误信息
+        self.result_text.clear()
+        self.result_text.append(f"<span style='color:red;'>运行测试时出错: {str(exception)}</span>")
+    
+    def check_long_running(self, task):
+        """检查是否运行时间过长，并显示提示对话框"""
+        # 只有在仍然判题中才显示对话框
+        if not self.is_judging:
+            return
+            
+        # 创建并显示提示对话框
+        self.long_running_dialog = LongRunningDialog(self, task)
+        
+        # 如果用户选择"直接查看"
+        if self.long_running_dialog.exec_() == QDialog.Accepted:
+            # 如果工作线程还在运行，尝试停止
+            if self.judge_worker and self.judge_worker.isRunning():
+                # 创建一个"取消"的结果
+                self.on_judge_finished("", "判题被用户取消", 3.0)
+                # 尝试终止线程（不太推荐，但这是紧急情况）
+                self.judge_worker.terminate()
+                self.judge_worker.wait()  # 等待线程真正停止
 
     def on_package_button_clicked(self):
         """处理一键打包按钮点击事件"""
