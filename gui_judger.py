@@ -6,7 +6,6 @@ import traceback
 import tempfile
 import shutil
 import zipfile
-import webbrowser
 from PyQt5 import sip
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QLabel, QPushButton, QTextBrowser, QTreeWidget, QTreeWidgetItem, 
@@ -15,6 +14,15 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QStyleFactory, QFrame, QCheckBox, QToolButton)
 from PyQt5.QtCore import Qt, QUrl, QTimer
 from PyQt5.QtGui import QFont, QPalette, QColor, QIcon
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QMainWindow
+
+
+class MyWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("My App")
+        self.setWindowIcon(QIcon("icon.ico"))  # 使用.ico文件
 
 # 添加调试信息
 print(f"程序启动时的当前目录: {os.getcwd()}")
@@ -209,7 +217,7 @@ def display_test_case_details(success, msg, details, input_content, user_output,
         
         # 添加标准输入
         if input_content:
-            output_lines.append("\n标准输入:")
+            output_lines.append("\nStandard Input")
             output_lines.append("-" * 60)  # 使用更长的分隔线
             output_lines.append(input_content)
             output_lines.append("-" * 60)  # 使用更长的分隔线
@@ -223,16 +231,16 @@ def display_test_case_details(success, msg, details, input_content, user_output,
             # 计算最大行数
             max_lines = max(len(user_lines), len(std_lines))
             
-            output_lines.append(f"{'你的输出':<30} | {'标准输出':<30}")
-            output_lines.append("-" * 70)  # 使用更长的分隔线，确保覆盖两列
+            output_lines.append(f"{'Your Output':<29} | {'Standard Output':<30}")
+            output_lines.append("-" * 60)  # 使用更长的分隔线，确保覆盖两列
             
             # 对齐打印每一行
             for i in range(max_lines):
                 user_line = user_lines[i] if i < len(user_lines) else ""
                 std_line = std_lines[i] if i < len(std_lines) else ""
-                output_lines.append(f"{user_line:<30} | {std_line:<30}")
+                output_lines.append(f"{user_line:<29} | {std_line:<30}")
             
-            output_lines.append("-" * 70)  # 使用更长的分隔线
+            output_lines.append("-" * 60)  # 使用更长的分隔线
     else:
         output_lines.append("测试通过！")
         
@@ -521,6 +529,7 @@ def create_zip_package(assignment_folder, student_id):
     print(f"总共打包了 {total_files_copied} 个文件")
     return zip_filename
 
+
 # 定义全局样式
 DARK_MODE = True  # 默认使用暗色模式
 
@@ -528,28 +537,38 @@ DARK_MODE = True  # 默认使用暗色模式
 class Colors:
     # 暗色主题 - 更优雅的深色配色
     DARK = {
-        'bg_primary': '#1e2127',
-        'bg_secondary': '#282c34',
-        'bg_tertiary': '#323842',
-        'text_primary': '#d3dae3',
-        'text_secondary': '#9da5b4',
-        'accent': '#61afef',
-        'accent_alt': '#c678dd',  # 添加第二强调色
-        'success': '#98c379',
-        'warning': '#e5c07b',
-        'error': '#e06c75',
-        'border': '#181a1f',
-        'highlight': '#3e4451',
-        'link': '#56b6c2',
-        'test_pass': '#98c379',
-        'test_fail': '#e06c75',
-        'scrollbar': '#3b3f4c',
-        'checkbox': '#42b983',  # 复选框颜色
-        'title_1': '#e5c07b',   # 标题1颜色
-        'title_2': '#c678dd',   # 标题2颜色
-        'title_3': '#61afef',   # 标题3颜色
-        'package_button': 'linear-gradient(135deg, #2b7a69, #42b983)'  # 一键打包按钮渐变
+        'bg_primary': '#1a1d23',       # 主背景色 - 稍微更深一点
+        'bg_secondary': '#242932',     # 次级背景 - 明暗区分更强
+        'bg_tertiary': '#2e333d',      # 三层背景 - 用于卡片、面板底色
+
+        'text_primary': '#e6eaf1',     # 主文本 - 更明亮，更易读
+        'text_secondary': '#a1a8b5',   # 次文本 - 稍提亮，更通透
+        
+        'accent': '#4fc3f7',           # 主强调色 - 更亮的蓝色（带点霓虹感）
+        'accent_alt': '#d57bee',       # 第二强调色 - 更偏紫粉，更醒目
+
+        'success': '#89d185',          # 成功提示 - 稍鲜亮
+        'warning': '#efc27b',          # 警告提示 - 提亮对比度
+        'error': '#ef6b73',            # 错误提示 - 更鲜明红
+
+        'border': '#1c1f26',           # 边框色 - 提高与背景的区分度
+        'highlight': '#454b57',        # 高亮色 - 用于鼠标悬停等
+
+        'link': '#5fdde5',             # 链接颜色 - 更加活泼灵动
+        'test_pass': '#89d185',        # 测试通过 - 同 success
+        'test_fail': '#ef6b73',        # 测试失败 - 同 error
+
+        'scrollbar': '#444b58',        # 滚动条 - 略提亮，更清晰
+        'checkbox': '#2e333d',         # 复选框 - 
+
+        'title_1': '#7bc6ff',  # 稍冷、偏霓虹蓝
+        'title_2': '#c1e192',  # 带点苹果绿 + 青柠感
+        'title_3': '#c89cf0',  # 粉紫中加入一点蓝调，更清爽
+
+        'package_button': '#ffffff'
+
     }
+
     
     # 浅色主题 - 更柔和的浅色配色
     LIGHT = {
@@ -570,10 +589,10 @@ class Colors:
         'test_fail': '#e45649',
         'scrollbar': '#c1c1c1',
         'checkbox': '#26a69a',  # 复选框颜色
-        'title_1': '#c18401',   # 标题1颜色
-        'title_2': '#a626a4',   # 标题2颜色
-        'title_3': '#4078f2',   # 标题3颜色
-        'package_button': 'linear-gradient(135deg, #318377, #39b385)'  # 一键打包按钮渐变
+        'title_1': '#4ba0ff',   # 清新的淡蓝色，亮度提高，适合主标题
+        'title_2': '#a2d77d',   # 明亮的草绿色，温暖且有层次感
+        'title_3': '#d3a8f9',   # 淡紫色调，柔和但富有活力
+        'package_button': '#333333'
     }
     
     @classmethod
@@ -870,7 +889,7 @@ class StudentIDDialog(QDialog):
         
         # 添加学号输入框
         self.id_input = QLineEdit()
-        self.id_input.setPlaceholderText("例如: 520370910001")
+        self.id_input.setPlaceholderText("例如: 5270********")
         self.id_input.setMaxLength(12)
         self.id_input.setFocus()
         layout.addWidget(self.id_input)
@@ -1034,7 +1053,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         # 设置窗口标题和大小
-        self.setWindowTitle("代码检查系统")
+        self.setWindowTitle("CodeSentry")
+        self.setWindowIcon(QIcon("arrow.ico"))  # 设置窗口图标
         self.resize(1500, 800)  # 增加窗口宽度
         
         # 全局变量
@@ -1140,8 +1160,16 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(separator)
         
         # 作业列表
-        assignments_label = QLabel("作业列表")
-        assignments_label.setStyleSheet(f"font-weight: bold; color: {Colors.current()['title_1']}; font-size: 24px; margin-bottom: 2px;")
+        assignments_label = QLabel("Folders")
+        assignments_label.setStyleSheet("""
+            QLabel {
+                font-weight: bold;
+                color: #a5e6dc;
+                font-size: 24px;
+                margin-bottom: 2px;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', monospace;
+            }
+        """)
         left_layout.addWidget(assignments_label)
         
         # 创建作业按钮区域
@@ -1180,8 +1208,8 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(separator2)
         
         # 题目列表
-        tasks_label = QLabel("题目列表")
-        tasks_label.setStyleSheet(f"font-weight: bold; color: {Colors.current()['title_2']}; font-size: 24px; margin-bottom: 2px;")
+        tasks_label = QLabel("Questions")
+        tasks_label.setStyleSheet(f"font-weight: bold; color: {Colors.current()['title_2']}; font-size: 24px; margin-bottom: 2px; font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', monospace;")
         left_layout.addWidget(tasks_label)
         
         # 创建题目列表部件
@@ -1203,16 +1231,27 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(separator3)
         
         # 添加一键打包按钮
-        self.package_button = QPushButton("一键打包")
+        self.package_button = QPushButton("Package")
         self.package_button.setStyleSheet(f"""
-            background: {Colors.current()['package_button']};
-            color: white;
-            font-weight: normal;
-            padding: 12px;
-            border-radius: 6px;
-            min-height: 45px;
-            font-size: 30px;
-            border: none;
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7bc6ff, stop:1 #c1e192);
+                color: white;
+                font-weight: normal;
+                padding: 12px;
+                border-radius: 6px;
+                min-height: 45px;
+                font-size: 30px;
+                border: none;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'Cascadia Code', monospace;
+            }}
+            
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4fc79b, stop:1 #52f6c9);
+            }}
+            
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2fa67b, stop:1 #32d6a9);
+            }}
         """)
         self.package_button.clicked.connect(self.on_package_button_clicked)
         left_layout.addWidget(self.package_button)
@@ -1232,8 +1271,8 @@ class MainWindow(QMainWindow):
         results_header_layout = QHBoxLayout()
         results_header_layout.setContentsMargins(0, 0, 0, 10)
         
-        results_label = QLabel("测试结果")
-        results_label.setStyleSheet(f"font-weight: bold; color: {Colors.current()['title_3']}; font-size: 30px; margin-bottom: 0px;")
+        results_label = QLabel("Result")
+        results_label.setStyleSheet(f"font-weight: bold; color: {Colors.current()['title_3']}; font-size: 30px; margin-bottom: 0px; font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', monospace;")
         results_header_layout.addWidget(results_label)
         
         results_header_layout.addStretch()
@@ -1311,7 +1350,7 @@ class MainWindow(QMainWindow):
         self.task_tree.clear()
         
         # 更新窗口标题
-        self.setWindowTitle(f"代码检查系统 - {assignment_path}")
+        self.setWindowTitle(f"CodeSentry - {assignment_path}")
         
         # 切换到作业目录
         original_dir = os.getcwd()
