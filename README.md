@@ -25,8 +25,8 @@
 2. 安装第三方库：pyinstaller
 3. 确保已经安装了所有依赖库（在py文件一开始就都列出来了）
 4. 在对应文件夹下命令行：`pyinstaller --noconsole --onefile --icon=arrow.ico --name=CodeSentry gui_judger.py`
-5. 如果遇到pyqt5缺少sip的报错提示：更新最新版本的sip。详情自行上网查找。
-6. 打包完成后，会在`dist/`文件夹下显示`CodeSentry.exe`，拖到原文件夹下即可。
+5. 如果遇到pyqt5缺少sip的报错提示：更新最新版本的sip。
+6. 打包完成后，会在`dist/`文件夹下显示`CodeSentry.xxx`，拖到原文件夹下即可。
 
 ## 2. 功能介绍
 
@@ -45,3 +45,5 @@
 
 ![image](https://github.com/user-attachments/assets/9fd6ce9e-3f2e-4dd9-a5c3-08287fd2da3d)
 
+Feel free to PR!  
+If this repository helped you, plz leave a star.
